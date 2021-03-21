@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace ObjectGraphPath
 {
@@ -34,6 +35,28 @@ namespace ObjectGraphPath
         public Dictionary<string,IGraphNode> Children { get; } = new Dictionary<string,IGraphNode>();
         public Type GetGenericType => typeof(T);
         string IGraphNode.NavigationName { get; set; }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+            sb.Append(((IGraphNode)this).NavigationName);
+
+            if (Children.Count == 1)
+            {
+                sb.Append(".");
+                sb.Append(Children.First().Value);
+            }
+
+            if (Children.Count > 1)
+            {
+                sb.Append(".{");
+                var children = string.Join(",", Children.Select(x => $".{x.Value}"));
+                sb.Append(children);
+                sb.Append("}");
+            }
+
+            return sb.ToString();
+        }
     }
 
 }

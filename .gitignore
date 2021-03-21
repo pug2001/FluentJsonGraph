@@ -37,3 +37,4 @@
 /.vs/FluentJsonGraph/v16/.suo
 */obj
 */bin
+*.user

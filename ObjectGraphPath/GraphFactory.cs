@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Linq.Expressions;
 
 namespace ObjectGraphPath
@@ -23,7 +24,11 @@ namespace ObjectGraphPath
                 }
                 else
                 {
-                    AddChildren(parentGraphNode, selectorGraph);
+                    //// skip the head node in selector breadcrumb as that is always parentGraphNode
+                    //var node = selectorGraph.Children.First().Value;
+
+                    // walk selector breadcrumb adding nodes which are not present in parentGraphNode
+                    AddChildren(parentGraphNode, selectorGraph); 
                 }
 
             }
@@ -33,16 +38,14 @@ namespace ObjectGraphPath
 
         private void AddChildren(IGraphNode parentGraphNode, IGraphNode selectorGraph)
         {
-            foreach (var childNode in selectorGraph.Children)
+            var childNode = selectorGraph.Children.First();
+            if (parentGraphNode.Children.ContainsKey(childNode.Key))
             {
-                if (parentGraphNode.Children.ContainsKey(childNode.Key))
-                {
-                    AddChildren(parentGraphNode.Children[childNode.Key],childNode.Value);
-                }
-                else
-                {
-                    parentGraphNode.Children.Add(childNode.Key,childNode.Value);
-                }
+                AddChildren(parentGraphNode.Children[childNode.Key],childNode.Value);
+            }
+            else
+            {
+                parentGraphNode.Children.Add(childNode.Key,childNode.Value);
             }
         }
     }

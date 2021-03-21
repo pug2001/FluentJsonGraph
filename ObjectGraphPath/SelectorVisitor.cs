@@ -12,34 +12,21 @@ namespace ObjectGraphPath
     }
     public class SelectorVisitor<T>:ExpressionVisitor, ISelectorVisitor
     {
-        private IGraphNode _selectEndNode;
         private IGraphNode _lastGraphNode;
         private readonly ILogger<SelectorVisitor<T>> _log;
+        private readonly IGraphNodeFactory _graphNodeFactory;
 
-        public SelectorVisitor(ILogger<SelectorVisitor<T>> log)
+        public SelectorVisitor(ILogger<SelectorVisitor<T>> log, IGraphNodeFactory graphNodeFactory)
         {
             _log = log;
+            _graphNodeFactory = graphNodeFactory;
         }
 
         public IGraphNode BuildGraph(Expression selector)
         {
+            _lastGraphNode = null;
             Visit(selector);
-            return FindRootNode();
-        }
-
-        private IGraphNode FindRootNode()
-        {
-            if (_lastGraphNode.Parent == null)
-            {
-                return _lastGraphNode;
-            }
-            var ret = _lastGraphNode;
-            do
-            {
-                ret = ret.Parent;
-            } while (ret.Parent != null);
-
-            return ret;
+            return _lastGraphNode.Children.First().Value; // skip the node which represents the x before the => in x=>x.Dependencies
         }
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
@@ -57,22 +44,39 @@ namespace ObjectGraphPath
             }
 
             Visit(node.Arguments[0]);
-            var parent = _selectEndNode;
+            var parentHead = _lastGraphNode;
             _lastGraphNode = null;
-            _selectEndNode = null;
             Visit(node.Arguments[1]);
-            var childNode = _lastGraphNode.Children.First().Value; // skip first node as that is x in x.NavigationProperty
+            var parentTail = TailNode(parentHead);
+            var childNode = _lastGraphNode.Children.First().Value.Children.First().Value; // skip 2 nodes as they are the x in x=>x.NavigationProperty
+            _lastGraphNode = parentHead;
             if (!string.IsNullOrWhiteSpace(childNode.NavigationName) )
             {
-                parent.Children.Add(childNode.NavigationName, childNode);
+                parentTail.Children.Add(childNode.NavigationName, childNode);
             }
             return node;
         }
-        //private Expression[] VisitArguments(IArgumentProvider nodes)
-        //{
-        //    return ExpressionVisitorUtils.VisitArguments(this, nodes);
-        //}
 
+        private IGraphNode HeadNode(IGraphNode node)
+        {
+            var ret = node;
+            while (ret?.Parent != null)
+            {
+                ret = ret.Parent;
+            } 
+
+            return ret;
+        }
+        private static IGraphNode TailNode(IGraphNode node)
+        {
+            var child = node;
+            while (child?.Children.Count > 0)
+            {
+                child = child.Children.First().Value;
+            }
+
+            return child;
+        }
 
         protected override Expression VisitMember(MemberExpression node)
         {
@@ -80,46 +84,16 @@ namespace ObjectGraphPath
             if (!propertyType.IsPrimitive)
             {
                 _log.LogDebug($"node={node}");
-                if (_lastGraphNode?.Children.ContainsKey(node.Member.Name)??false)
-                {
-                    _lastGraphNode = _lastGraphNode.Children[node.Member.Name];
-                }
-                else
-                {
-                    var graphNode = GraphNodeFactory(propertyType);
-                    graphNode.NavigationName = node.Member.Name;
-                    if (_lastGraphNode == null)
-                    {
-                        _selectEndNode = graphNode;
-                    }
-                    else
-                    {
-                        _lastGraphNode.Children.Add(node.Member.Name, graphNode);
-                    }
-
-                    _lastGraphNode = graphNode;
-                }
+                _lastGraphNode = _graphNodeFactory.CreateGraphNode(node.Member.Name, propertyType, _lastGraphNode);
             }
             var res =  base.VisitMember(node);
             return res;
         }
 
-        private IGraphNode GraphNodeFactory(Type propertyType)
-        {
-            var graphNodeType = typeof(GraphNode<>).MakeGenericType(new Type[] {propertyType});
-            var graphNode = (IGraphNode) Activator.CreateInstance(graphNodeType);
-            graphNode.Parent = _lastGraphNode;
-            return graphNode;
-        }
 
         protected override Expression VisitParameter(ParameterExpression p)
         {
-            var graphNode = GraphNodeFactory(p.Type);
-            if (!string.IsNullOrWhiteSpace(_lastGraphNode.NavigationName))
-            {
-                graphNode.Children.Add(_lastGraphNode.NavigationName, _lastGraphNode);
-                _lastGraphNode = graphNode;
-            }
+            _lastGraphNode = _graphNodeFactory.CreateGraphNode(p.Name,p.Type,_lastGraphNode);
 
             var res = base.VisitParameter(p);
 

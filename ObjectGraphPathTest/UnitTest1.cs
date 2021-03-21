@@ -18,6 +18,7 @@ namespace ObjectGraphPathTest
             return new ServiceCollection()
                 .AddSingleton<ISelectorVisitor, SelectorVisitor<Product>>()
                 .AddSingleton<GraphFactory<Product>, GraphFactory<Product>>()
+                .AddSingleton<IGraphNodeFactory,GraphNodeFactory>()
                 .AddLogging()
                 .BuildServiceProvider();
 
@@ -26,31 +27,40 @@ namespace ObjectGraphPathTest
         public void TestNonSelectMethodInSelector()
         {
             var serviceProvider = ServiceProvider();
-            var products = BuildTestObjectGraph();
             var factory = serviceProvider.GetService<GraphFactory<Product>>();
             var duffIncludePaths = new Expression<Func<Product, object>>[]
             {
                 (x)=>x.Dependencies.GroupBy(y=>y.RequiresChildPart)
             };
-            Assert.ThrowsException<Exception>(() => factory.SelectorsToGraph(duffIncludePaths), "Method is not select in selector \"x.Dependencies.GroupBy(y => y.RequiresChildPart)\"");
+            Assert.ThrowsException<Exception>(() => factory?.SelectorsToGraph(duffIncludePaths), "Method is not select in selector \"x.Dependencies.GroupBy(y => y.RequiresChildPart)\"");
         }
 
         [TestMethod]
-        public void TestMethod1()
+        public void TestSelectorToGraph()
         {
             var serviceProvider = ServiceProvider();
-            var products = BuildTestObjectGraph();
             var factory = serviceProvider.GetService<GraphFactory<Product>>();
-            var graph = factory.SelectorsToGraph(IncludePaths);
+            var graph = factory?.SelectorsToGraph(IncludePaths);
 
-            Assert.AreEqual(2,graph.Children.Count);
+            Assert.AreEqual("{x.{.Manufacturer,.Dependencies.{.RequiresChildPart,.ParentPart}}}", graph?.ToString());
         }
 
         private Expression<Func<Product, object>>[] IncludePaths => new Expression<Func<Product, object>>[]
         {
-//            (x)=>x.Manufacturer,
-            (x)=>x.Dependencies.Select(y=>y.RequiresChildPart)
+            (x)=>x.Manufacturer,
+            (x)=>x.Dependencies.Select(y=>y.RequiresChildPart),
+            (x)=>x.Dependencies.Select(y=>y.ParentPart)
         };
+
+
+        [TestMethod]
+        public void TestDataGraphToJson()
+        {
+            var serviceProvider = ServiceProvider();
+            var factory = serviceProvider.GetService<GraphFactory<Product>>();
+            var graph = factory?.SelectorsToGraph(IncludePaths);
+            var products = BuildTestObjectGraph();
+        }
 
         private Product[] BuildTestObjectGraph()
         {
